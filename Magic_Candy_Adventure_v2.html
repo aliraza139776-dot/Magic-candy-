@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="ur" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#ff5ca8">
+<title>Magic Candy Adventure</title>
+<style>
+:root{--pink:#ff5ca8;--purple:#8b5cf6;--card:#ffffffee;--text:#25223a}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:radial-gradient(circle at top,#fff8fd,#eef4ff 70%);font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:var(--text)}
+.app{max-width:520px;margin:auto;padding:12px 10px 24px;text-align:center}
+.header{display:flex;align-items:center;justify-content:space-between;gap:7px;margin-bottom:8px}
+.logo{font-size:23px;font-weight:900;white-space:nowrap}.pill{background:#fff;border:1px solid #eee;border-radius:999px;padding:7px 10px;font-weight:800;box-shadow:0 3px 12px #00000010}
+.subtitle{font-size:12px;opacity:.62}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:10px auto;max-width:440px}
+.stat{background:var(--card);border-radius:14px;padding:7px 3px;box-shadow:0 4px 14px #0000000d;font-size:12px}
+.stat b{display:block;font-size:17px}
+.goal{max-width:440px;margin:7px auto 10px;background:#fff;border-radius:14px;padding:7px 10px;text-align:right;font-size:12px}
+.track{height:8px;background:#eee;border-radius:20px;overflow:hidden;margin-top:5px}.fill{height:100%;width:0;background:linear-gradient(90deg,var(--pink),var(--purple));transition:width .25s}
+.board{width:min(94vw,440px);margin:12px auto;display:grid;grid-template-columns:repeat(8,1fr);gap:5px;touch-action:none;user-select:none;-webkit-user-select:none}
+.tile{position:relative;aspect-ratio:1;display:grid;place-items:center;border:0;border-radius:14px;background:linear-gradient(145deg,#fff,#f4f4fb);box-shadow:0 4px 7px #00000018,inset 0 -4px #0000000d;font-size:clamp(20px,7vw,34px);transition:transform .18s,opacity .18s}
+.tile:after{content:"";position:absolute;left:15%;top:10%;width:25%;height:15%;border-radius:50%;background:#fff8;transform:rotate(-25deg)}
+.tile.pop{transform:scale(.05) rotate(30deg);opacity:0}.tile.pressed{transform:scale(.9)}
+.actions{display:flex;justify-content:center;flex-wrap:wrap;gap:4px;max-width:440px;margin:6px auto}
+button{border:0;border-radius:13px;padding:10px 13px;background:#fff;box-shadow:0 3px 12px #0002;font-size:14px;font-weight:800;color:var(--text)}
+button:disabled{opacity:.42}
+.levels{display:flex;gap:6px;overflow-x:auto;direction:ltr;max-width:440px;margin:8px auto;padding:5px 2px}
+.level{min-width:46px;padding:9px 4px}.active{outline:3px solid #999}
+#message{min-height:24px;font-size:13px;margin:6px}
+.overlay{position:fixed;inset:0;background:#17152a99;display:none;align-items:center;justify-content:center;padding:20px;z-index:5}
+.modal{width:min(92vw,390px);background:white;border-radius:24px;padding:24px;box-shadow:0 20px 60px #0005}
+.modal h2{margin:4px 0 8px;font-size:28px}.modal p{margin:5px 0 16px;opacity:.72}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <div class="logo">✨ Magic Candy Adventure</div>
+    <div class="pill">🪙 <span id="coins">100</span></div>
+  </div>
+  <div class="subtitle">Candy کو انگلی سے swipe کریں — 3 یا زیادہ ایک جیسے ملائیں!</div>
+
+  <div class="stats">
+    <div class="stat">📍 Level<b id="level">1</b></div>
+    <div class="stat">🎯 Goal<b id="goal">200</b></div>
+    <div class="stat">👣 Moves<b id="moves">22</b></div>
+    <div class="stat">❤️ Lives<b id="lives">5</b></div>
+  </div>
+
+  <div class="goal">Progress <div class="track"><div id="fill" class="fill"></div></div></div>
+  <div id="board" class="board"></div>
+
+  <div class="actions">
+    <button id="restart">🔄 Restart</button>
+    <button id="shuffle">🔀 Shuffle <span id="shuffleCost">(10🪙)</span></button>
+    <button id="hint">💡 Hint <span id="hintCost">(5🪙)</span></button>
+    <button id="next" disabled>➡️ Next</button>
+  </div>
+
+  <div id="levels" class="levels"></div>
+  <div id="message" aria-live="polite">🎮 Candy کو پکڑ کر swipe کریں۔</div>
+</div>
+
+<div id="overlay" class="overlay">
+  <div class="modal">
+    <div id="modalIcon" style="font-size:45px">🎉</div>
+    <h2 id="modalTitle">Level Complete!</h2>
+    <p id="modalText"></p>
+    <button id="modalButton">➡️ Next Level</button>
+  </div>
+</div>
+
+<script>
+(()=> {
+const board=document.getElementById('board'), levelEl=document.getElementById('level'),goalEl=document.getElementById('goal'),
+movesEl=document.getElementById('moves'),livesEl=document.getElementById('lives'),coinsEl=document.getElementById('coins'),
+fill=document.getElementById('fill'),message=document.getElementById('message'),next=document.getElementById('next'),
+levelsBox=document.getElementById('levels'),overlay=document.getElementById('overlay'),modalTitle=document.getElementById('modalTitle'),
+modalText=document.getElementById('modalText'),modalIcon=document.getElementById('modalIcon'),modalButton=document.getElementById('modalButton');
+
+const items=['💎','🍭','⭐','🍬','🔮','🪄'];
+let level=1,unlocked=1,score=0,moves=22,goal=200,lives=5,coins=100,boardData=[];
+let busy=false,gesture=null;
+
+const idx=(r,c)=>r*8+c, valid=(r,c)=>r>=0&&r<8&&c>=0&&c<8;
+function cfg(l){return {goal:150+l*50,moves:Math.max(12,23-l),types:Math.min(6,4+Math.floor((l-1)/3))}}
+function rnd(){return Math.floor(Math.random()*cfg(level).types)}
+
+function matches(){
+ const s=new Set();
+ for(let r=0;r<8;r++){let c=0;while(c<8){let j=c+1;while(j<8&&boardData[idx(r,j)]===boardData[idx(r,c)])j++;if(j-c>=3)for(let k=c;k<j;k++)s.add(idx(r,k));c=j}}
+ for(let c=0;c<8;c++){let r=0;while(r<8){let j=r+1;while(j<8&&boardData[idx(j,c)]===boardData[idx(r,c)])j++;if(j-r>=3)for(let k=r;k<j;k++)s.add(idx(k,c));r=j}}
+ return [...s];
+}
+function newBoard(){do{boardData=Array.from({length:64},rnd)}while(matches().length)}
+function render(){
+ board.innerHTML='';
+ boardData.forEach((v,i)=>{let d=document.createElement('div');d.className='tile';d.textContent=items[v];d.dataset.i=i;board.appendChild(d)});
+ levelEl.textContent=level;goalEl.textContent=goal;movesEl.textContent=moves;livesEl.textContent=lives;coinsEl.textContent=coins;
+ fill.style.width=Math.min(100,score/goal*100)+'%';drawLevels();
+}
+function drawLevels(){
+ levelsBox.innerHTML='';
+ for(let l=1;l<=15;l++){let b=document.createElement('button');b.className='level '+(l===level?'active':'');b.textContent=l>unlocked?'🔒 '+l:l;b.disabled=l>unlocked;b.onclick=()=>startLevel(l);levelsBox.appendChild(b)}
+}
+function swap(i,j){[boardData[i],boardData[j]]=[boardData[j],boardData[i]]}
+function finish(){
+ if(score>=goal){next.disabled=false;if(level===unlocked)unlocked=Math.min(15,unlocked+1);drawLevels();showModal(true);return true}
+ if(moves<=0){lives=Math.max(0,lives-1);showModal(false);return true}
+ return false;
+}
+function clearMatches(){
+ const found=matches();
+ if(!found.length){render();finish();return}
+ score+=found.length*10+(found.length>=4?20:0);
+ found.forEach(i=>{board.children[i]?.classList.add('pop');boardData[i]=-1});
+ setTimeout(()=>{
+   for(let c=0;c<8;c++){
+     let w=7;
+     for(let r=7;r>=0;r--)if(boardData[idx(r,c)]!==-1){boardData[idx(w,c)]=boardData[idx(r,c)];w--}
+     for(let r=w;r>=0;r--)boardData[idx(r,c)]=rnd();
+   }
+   render();setTimeout(clearMatches,90);
+ },180);
+}
+function move(i,dr,dc){
+ if(busy||moves<=0||score>=goal)return;
+ const r=Math.floor(i/8),c=i%8,nr=r+dr,nc=c+dc;if(!valid(nr,nc))return;
+ const j=idx(nr,nc);busy=true;swap(i,j);render();
+ setTimeout(()=>{
+   if(!matches().length){swap(i,j);render();message.textContent='⚠️ یہاں match نہیں بنتا۔';busy=false;return}
+   moves--;coins+=1;message.textContent='✨ Nice! +1 coin';
+   render();setTimeout(()=>{clearMatches();setTimeout(()=>{busy=false},320)},80);
+ },180);
+}
+function pointerDown(e){
+ if(busy||moves<=0||score>=goal)return;
+ const t=e.target.closest('.tile');if(!t)return;e.preventDefault();
+ const p=e.touches?e.touches[0]:e;
+ gesture={x:p.clientX,y:p.clientY,i:Number(t.dataset.i),tile:t};
+ t.classList.add('pressed');
+}
+function pointerUp(e){
+ if(!gesture)return;
+ const g=gesture;gesture=null;g.tile.classList.remove('pressed');
+ const p=e.changedTouches?e.changedTouches[0]:e,dx=p.clientX-g.x,dy=p.clientY-g.y;
+ if(Math.max(Math.abs(dx),Math.abs(dy))<18){message.textContent='👉 Candy کو swipe کریں';return}
+ if(Math.abs(dx)>=Math.abs(dy))move(g.i,0,dx>0?1:-1);else move(g.i,dy>0?1:-1,0);
+}
+board.addEventListener('pointerdown',pointerDown);board.addEventListener('pointerup',pointerUp);board.addEventListener('pointercancel',()=>{if(gesture){gesture.tile.classList.remove('pressed');gesture=null}});
+board.addEventListener('touchstart',pointerDown,{passive:false});board.addEventListener('touchend',pointerUp,{passive:false});
+board.addEventListener('contextmenu',e=>e.preventDefault());
+
+function startLevel(l){if(l>unlocked)return;level=l;const c=cfg(l);goal=c.goal;moves=c.moves;score=0;busy=false;next.disabled=true;newBoard();render();message.textContent='🎯 '+goal+' points حاصل کریں!'}
+function showModal(win){
+ overlay.style.display='flex';
+ if(win){modalIcon.textContent='🎉';modalTitle.textContent='Level '+level+' Complete!';modalText.textContent='آپ نے '+score+' points حاصل کیے۔ اگلا level unlock ہوگیا!';modalButton.textContent='➡️ Next Level';}
+ else{modalIcon.textContent='😅';modalTitle.textContent='Moves ختم ہوگئیں';modalText.textContent='ایک life استعمال ہوئی۔ دوبارہ کوشش کریں۔';modalButton.textContent='🔄 دوبارہ کھیلیں';}
+}
+function hideModal(){overlay.style.display='none'}
+modalButton.onclick=()=>{hideModal();if(score>=goal&&level<unlocked)startLevel(level+1);else startLevel(level)}
+document.getElementById('restart').onclick=()=>startLevel(level);
+next.onclick=()=>{if(level<unlocked)startLevel(level+1)};
+document.getElementById('shuffle').onclick=()=>{if(busy||coins<10)return message.textContent='🪙 Shuffle کے لیے 10 coins چاہئیں';coins-=10;newBoard();render();message.textContent='🔀 Board shuffle ہوگیا!'};
+document.getElementById('hint').onclick=()=>{
+ if(busy||coins<5)return message.textContent='🪙 Hint کے لیے 5 coins چاہئیں';
+ for(let i=0;i<64;i++){let r=Math.floor(i/8),c=i%8;for(const [dr,dc] of [[1,0],[0,1]]){let nr=r+dr,nc=c+dc;if(valid(nr,nc)){swap(i,idx(nr,nc));if(matches().length){swap(i,idx(nr,nc));coins-=5;render();board.children[i].classList.add('pressed');setTimeout(()=>board.children[i]?.classList.remove('pressed'),700);return}swap(i,idx(nr,nc))}}}
+ message.textContent='💡 ابھی کوئی آسان match نہیں ملا۔';
+};
+startLevel(1);
+})();
+</script>
+</body>
+</html>
